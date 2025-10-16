@@ -9,6 +9,7 @@ colorama==0.4.6
 cookiecutter==2.6.0
 Django==5.2.7
 django-tailwind==4.2.0
+djangorestframework==3.16.1
 honcho==2.0.0
 idna==3.11
 Jinja2==3.1.6
