@@ -12,12 +12,129 @@
 <body class="bg-gray-50 text-black font-serif leading-normal tracking-normal">
 
 <div class="container mx-auto">
-    <section class="flex items-center justify-center h-screen">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-40">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
-        </svg>
+    <section id="recorder" class="flex items-center justify-center h-screen">
+        <div id="recButton"
+             role="button"
+             tabindex="0"
+             class="flex flex-col items-center justify-center p-6 rounded-lg cursor-pointer select-none bg-white shadow-md hover:shadow-lg transition-all">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                 stroke-width="1.5" stroke="currentColor" class="w-20 h-20 text-gray-700">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+            </svg>
 
+            <span id="recLabel" class="mt-3 text-sm text-gray-600">Hold to speak</span>
+        </div>
+
+        {% comment %} <audio id="audioPlayback" controls class="hidden mt-4"></audio> {% endcomment %}
+
+        <script>
+            (function() {
+                const btn = document.getElementById('recButton');
+                const label = document.getElementById('recLabel');
+                
+
+                let mediaRecorder = null;
+                let chunks = [];
+
+                async function startHold() {
+                    // visual feedback
+                    btn.classList.add('bg-red-50');
+                    btn.querySelector('svg').classList.add('animate-pulse');
+                    label.textContent = 'Recording...';
+
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        mediaRecorder = new MediaRecorder(stream);
+                        chunks = [];
+
+                        mediaRecorder.ondataavailable = (e) => {
+                            if (e.data && e.data.size > 0) chunks.push(e.data);
+                        };
+
+                        mediaRecorder.onstop = () => {
+                            const blob = new Blob(chunks, { type: 'audio/webm' });
+                            label.textContent = 'Hold to speak';
+                            // stop all tracks to release the microphone
+                            stream.getTracks().forEach(t => t.stop());
+
+                            // send blob to server
+                            const formData = new FormData();
+                            formData.append('audio', blob, 'recording.webm');
+                            fetch('/api/send_audio', {
+                                method: 'POST',
+                                body: formData
+                            }).then(response => response.json())
+                              .then(data => {
+                                    console.log('Transcription result:', data);
+                                    label.textContent = data.transcription || 'No transcription';
+                                }).catch(err => {
+                                    console.error('Error during transcription:', err);
+                                    label.textContent = 'Error during transcription';
+                                });
+                        };
+
+                        mediaRecorder.start();
+                    } catch (err) {
+                        console.error('Microphone access denied or error:', err);
+                        stopHold();
+                    }
+                }
+
+                function stopHold() {
+                    btn.classList.remove('bg-red-50');
+                    btn.querySelector('svg').classList.remove('animate-pulse');
+                    label.textContent = 'Processing...';
+
+                    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                        mediaRecorder.stop();
+                    } else {
+                        label.textContent = 'Hold to speak';
+                    }
+                }
+
+                // Mouse events
+                btn.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    startHold();
+                });
+                window.addEventListener('mouseup', () => {
+                    stopHold();
+                });
+                btn.addEventListener('mouseleave', () => {
+                    // stop if user drags pointer away while holding
+                    if (mediaRecorder && mediaRecorder.state === 'recording') stopHold();
+                });
+
+                // Touch events (mobile)
+                btn.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    startHold();
+                }, { passive: false });
+                btn.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    stopHold();
+                }, { passive: false });
+
+                // keyboard accessibility: space or enter to start/stop
+                let keyRecording = false;
+                btn.addEventListener('keydown', (e) => {
+                    if ((e.key === ' ' || e.key === 'Enter') && !keyRecording) {
+                        e.preventDefault();
+                        keyRecording = true;
+                        startHold();
+                    }
+                });
+                btn.addEventListener('keyup', (e) => {
+                    if ((e.key === ' ' || e.key === 'Enter') && keyRecording) {
+                        keyRecording = false;
+                        stopHold();
+                    }
+                });
+            })();
+        </script>
     </section>
 </div>
+
 </body>
 </html>
