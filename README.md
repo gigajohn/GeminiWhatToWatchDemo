@@ -12,4 +12,5 @@ Chat woth gemini to figure out what to watch
 
 ## How to Run
 cd ./core
+
 python manage.py tailwind dev
