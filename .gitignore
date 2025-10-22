@@ -182,3 +182,4 @@ cython_debug/
 
 
 core/media/audio_files/
+core/media/uploads/

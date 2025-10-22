@@ -53,25 +53,67 @@
                         };
 
                         mediaRecorder.onstop = () => {
+                            console.log('onstop event fired');
                             const blob = new Blob(chunks, { type: 'audio/webm' });
-                            label.textContent = 'Hold to speak';
-                            // stop all tracks to release the microphone
-                            stream.getTracks().forEach(t => t.stop());
+                            console.log('Blob created, size:', blob.size);
 
-                            // send blob to server
+                            // Stop all tracks to release the microphone
+                            if (stream && typeof stream.getTracks === 'function') {
+                                stream.getTracks().forEach(t => t.stop());
+                            }
+
+                            if (blob.size === 0) {
+                                console.log('Blob is empty, not sending to server.');
+                                label.textContent = 'Hold to speak';
+                                return; // Exit if no audio was recorded
+                            }
+
+                            label.textContent = 'Processing...';
+
+                            // Send blob to server
                             const formData = new FormData();
                             formData.append('audio', blob, 'recording.webm');
-                            fetch('/api/send_audio', {
+
+                            function getCookie(name) {
+                                const value = `; ${document.cookie}`;
+                                const parts = value.split(`; ${name}=`);
+                                if (parts.length === 2) return parts.pop().split(';').shift();
+                            }
+
+                            const csrftoken = getCookie('csrftoken') || '{{ csrf_token }}';
+                            console.log('Sending audio to server...');
+
+                            fetch('/api/send_audio/', {
                                 method: 'POST',
-                                body: formData
-                            }).then(response => response.json())
-                              .then(data => {
-                                    console.log('Transcription result:', data);
-                                    label.textContent = data.transcription || 'No transcription';
-                                }).catch(err => {
-                                    console.error('Error during transcription:', err);
-                                    label.textContent = 'Error during transcription';
-                                });
+                                body: formData,
+                                credentials: 'same-origin',
+                                headers: {
+                                    'X-CSRFToken': csrftoken
+                                }
+                            }).then(response => {
+                                console.log('Received response from server:', response);
+                                if (!response.ok) {
+                                    return response.json().then(err => {
+                                        throw new Error(err.error || 'Server error');
+                                    });
+                                }
+                                return response.blob();
+                            })
+                            .then(audioBlob => {
+                                console.log('Received audio blob from server, size:', audioBlob.size);
+                                if (audioBlob.size === 0) {
+                                    console.log('Received empty audio blob from server.');
+                                    label.textContent = 'An error occurred.';
+                                    return;
+                                }
+                                const audioUrl = URL.createObjectURL(audioBlob);
+                                const audio = new Audio(audioUrl);
+                                audio.play();
+                                label.textContent = 'Hold to speak';
+                            }).catch(err => {
+                                console.error('Error during API call:', err);
+                                label.textContent = 'An error occurred.';
+                            });
                         };
 
                         mediaRecorder.start();
